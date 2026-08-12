@@ -65,24 +65,24 @@ if uploaded_file is not None:
         final_df = bad_ratings[['id', 'Atendente', 'feedback_score', 'Tabulação', 'Comentário', 'created_at']]
         final_df.columns = ['ID do Atendimento', 'Atendente', 'Nota', 'Tabulação', 'Comentário', 'Data do Atendimento']
         
-        # --- FILTROS ORGANIZADOS POR ABAS (TABS) ---
+        # --- FILTROS EM LISTAS DE SELEÇÃO (DROPDOWN MODERNO) ---
         st.markdown("---")
-        st.write("📌 **Filtros de Visualização por Categoria:**")
+        st.write("🔍 **Filtrar Dados do Relatório:**")
         
-        tab_atendente, tab_nota, tab_tabulacao = st.tabs(["👥 Atendentes", "⭐ Notas", "🏷️ Tabulações"])
+        col_f1, col_f2, col_f3 = st.columns(3)
         
         lista_atendentes = final_df['Atendente'].unique().tolist()
         lista_notas = final_df['Nota'].unique().tolist()
         lista_tabulacoes = final_df['Tabulação'].unique().tolist()
         
-        with tab_atendente:
-            filtro_atendente = st.multiselect("Selecione os atendentes:", lista_atendentes, default=lista_atendentes)
+        with col_f1:
+            filtro_atendente = st.multiselect("👥 Atendente(s):", lista_atendentes, default=lista_atendentes)
             
-        with tab_nota:
-            filtro_nota = st.multiselect("Selecione as notas:", lista_notas, default=lista_notas)
+        with col_f2:
+            filtro_nota = st.multiselect("⭐ Nota(s):", lista_notas, default=lista_notas)
             
-        with tab_tabulacao:
-            filtro_tabulacao = st.multiselect("Selecione as tabulações:", lista_tabulacoes, default=lista_tabulacoes)
+        with col_f3:
+            filtro_tabulacao = st.multiselect("🏷️ Tabulação(ões):", lista_tabulacoes, default=lista_tabulacoes)
             
         # Aplicando os filtros
         df_filtrado = final_df[
