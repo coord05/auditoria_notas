@@ -47,56 +47,90 @@ if uploaded_file is not None:
             return None 
 
         df['Atendente'] = df['agent_login'].apply(traduzir_atendente)
-        df = df[df['Atendente'].notna()] 
+        df_mapeado = df[df['Atendente'].notna()].copy()
 
-        # Lógica de Auditoria
-        nota_ruim = (df['feedback_score'] >= 0) & (df['feedback_score'] <= 3)
-        palavras_negativas = ['demora', 'ruim', 'falha', 'problema', 'caiu', 'lento', 'cancelar', 'insatisfeito']
-        tem_palavra = df['feedback_text_clean'].apply(lambda x: any(p in x.lower() for p in palavras_negativas))
+        # Lógica de Auditoria Rigorosa
+        nota_ruim = (df_mapeado['feedback_score'] >= 0) & (df_mapeado['feedback_score'] <= 3)
+        palavras_negativas = ['demora', 'horas', 'dias', 'esperando', 'aguardando', 'ninguém', 'ninguem', 'nunca', 'cadê', 'cade', 'não recebi', 'nao recebi', 'nada', 'robô', 'robo', 'descaso', 'falta de respeito', 'de novo', 'novamente', 'não adianta', 'nao adianta', 'não funciona', 'nao funciona', 'caiu', 'caindo', 'oscilando', 'sem sinal', 'sem internet', 'instável', 'instabilidade', 'desconectando', 'lento', 'lentidão', 'ping', 'travando', 'não carrega', 'nao carrega', 'falha', 'problema', 'não conecta', 'nao conecta', 'sem conecta', 'quedas', 'cancelar', 'cancelamento', 'lixo', 'ruim', 'péssimo', 'pessimo', 'horrível', 'horrivel', 'absurdo', 'ridículo', 'ridiculo', 'palhaçada', 'enganação', 'enganacao', 'procon', 'anatel', 'processo', 'insatisfeito', 'insatisfação', 'pelo amor', 'advogado']
         
-        final_df = df[nota_ruim | tem_palavra].copy()
-        final_df['Tabulação'] = final_df['tabulation'].fillna('Sem tabulação')
-        final_df['Comentário'] = final_df['feedback_text_clean'].replace('', 'Sem comentário')
+        def eh_comentario_critico(texto):
+            if not texto or str(texto).lower() in ['nan', 'none', '']: return False
+            if str(texto).isdigit(): return False
+            texto_str = str(texto).lower()
+            if texto_str in ['bom dia', 'boa tarde', 'boa noite', 'ok', 'sim', 'não', 'nao', 'obrigado', 'obrigada', 'valeu']: return False
+            return any(p in texto_str for p in palavras_negativas)
+
+        tem_comentario_critico_real = df_mapeado['feedback_text_clean'].apply(eh_comentario_critico)
+        
+        bad_ratings = df_mapeado[nota_ruim | tem_comentario_critico_real].copy()
+        bad_ratings['Tabulação'] = bad_ratings['tabulation'].fillna('Sem tabulação')
+        bad_ratings['Comentário'] = bad_ratings['feedback_text_clean'].replace('', 'Sem comentário')
+        
+        final_df = bad_ratings[['id', 'Atendente', 'feedback_score', 'Tabulação', 'Comentário', 'created_at', 'feedback_text_clean']].copy()
+        final_df.columns = ['ID do Atendimento', 'Atendente', 'Nota', 'Tabulação', 'Comentário', 'Data do Atendimento', 'Raw_Text']
 
         # ABAS DO PAINEL
         aba1, aba2 = st.tabs(["📋 Auditoria de Notas", "⏱️ Métricas de Tempo"])
 
         with aba1:
-            st.write("🔍 **Filtros de Auditoria:**")
+            st.write("🔍 **Filtros de Auditoria (Selecione abaixo):**")
             c1, c2, c3 = st.columns(3)
             lista_at = sorted(final_df['Atendente'].unique().tolist())
-            with c1: f_at = st.multiselect("Atendente:", lista_at, default=lista_at)
-            with c2: f_nota = st.multiselect("Nota:", sorted(final_df['feedback_score'].unique()), default=sorted(final_df['feedback_score'].unique()))
-            with c3: f_tab = st.multiselect("Tabulação:", sorted(final_df['Tabulação'].unique()), default=sorted(final_df['Tabulação'].unique()))
+            lista_nota = sorted(final_df['Nota'].unique().tolist())
+            lista_tab = sorted(final_df['Tabulação'].unique().tolist())
             
-            df_f = final_df[(final_df['Atendente'].isin(f_at)) & (final_df['feedback_score'].isin(f_nota)) & (final_df['Tabulação'].isin(f_tab))]
+            with c1: f_at = st.multiselect("Atendente(s):", lista_at, default=lista_at)
+            with c2: f_nota = st.multiselect("Nota(s):", lista_nota, default=lista_nota)
+            with c3: f_tab = st.multiselect("Tabulação(ões):", lista_tab, default=lista_tab)
             
-            st.dataframe(df_f[['id', 'Atendente', 'feedback_score', 'Tabulação', 'Comentário']], use_container_width=True)
+            df_filtrado = final_df[
+                (final_df['Atendente'].isin(f_at)) & 
+                (final_df['Nota'].isin(f_nota)) & 
+                (final_df['Tabulação'].isin(f_tab))
+            ]
             
-            # Gráficos e Expansores (O que você queria de volta!)
+            st.subheader(f"📋 Encontramos {len(df_filtrado)} atendimentos críticos para análise")
+            st.dataframe(df_filtrado.drop(columns=['Raw_Text']), use_container_width=True)
+            
+            # Gráficos e Expansores de IDs
             g1, g2 = st.columns(2)
             with g1:
                 st.write("**Gargalos por Tabulação:**")
-                st.bar_chart(df_f.groupby('Tabulação').size())
+                resumo_tab = df_filtrado.groupby('Tabulação').size().reset_index(name='Quantidade')
+                if not resumo_tab.empty:
+                    st.bar_chart(resumo_tab.set_index('Tabulação'))
                 with st.expander("➕ Ver IDs por Tabulação"):
-                    for tab, group in df_f.groupby('Tabulação'):
-                        st.markdown(f"**{tab}:** {', '.join(group['id'].astype(str))}")
+                    ids_por_tab = df_filtrado.groupby('Tabulação')['ID do Atendimento'].apply(lambda x: ', '.join(x.astype(str))).reset_index()
+                    for _, row in ids_por_tab.iterrows():
+                        st.markdown(f"**{row['Tabulação']}:** {row['ID do Atendimento']}")
+                        
             with g2:
                 st.write("**Gargalos por Atendente:**")
-                st.bar_chart(df_f.groupby('Atendente').size())
+                resumo_ag = df_filtrado.groupby('Atendente').size().reset_index(name='Quantidade')
+                if not resumo_ag.empty:
+                    st.bar_chart(resumo_ag.set_index('Atendente'))
                 with st.expander("➕ Ver IDs por Atendente"):
-                    for at, group in df_f.groupby('Atendente'):
-                        st.markdown(f"**{at}:** {', '.join(group['id'].astype(str))}")
+                    ids_por_ag = df_filtrado.groupby('Atendente')['ID do Atendimento'].apply(lambda x: ', '.join(x.astype(str))).reset_index()
+                    for _, row in ids_por_ag.iterrows():
+                        st.markdown(f"**{row['Atendente']}:** {row['ID do Atendimento']}")
+
+            # Leitura Direta de Comentários Críticos
+            st.markdown("---")
+            st.subheader("💬 Leitura Direta de IDs e Comentários Críticos")
+            df_comentarios = df_filtrado[df_filtrado['Raw_Text'].apply(eh_comentario_critico)].copy()
+            tabela_comentarios = df_comentarios[['ID do Atendimento', 'Atendente', 'Comentário']]
+            st.dataframe(tabela_comentarios, use_container_width=True)
 
         with aba2:
-            st.subheader("⏱️ Métricas de Tempo")
-            df['Seg_Espera'] = (df['attended_at'] - df['created_at']).dt.total_seconds()
-            df['Seg_TMA'] = (df['closed_at'] - df['attended_at']).dt.total_seconds()
-            st.metric("Tempo Médio de Espera (Fila - Geral)", formatar_tempo(df['Seg_Espera'].mean()))
+            st.subheader("⏱️ Métricas de Tempo e Eficiência")
+            df_mapeado['Seg_Espera'] = (df_mapeado['attended_at'] - df_mapeado['created_at']).dt.total_seconds()
+            df_mapeado['Seg_TMA'] = (df_mapeado['closed_at'] - df_mapeado['attended_at']).dt.total_seconds()
             
-            tma_atend = df.groupby('Atendente')[['Seg_TMA']].mean().reset_index()
+            st.metric("Tempo Médio de Espera (Fila - Geral)", formatar_tempo(df_mapeado['Seg_Espera'].mean()))
+            
+            tma_atend = df_mapeado.groupby('Atendente')[['Seg_TMA']].mean().reset_index()
             tma_atend['Média TMA'] = tma_atend['Seg_TMA'].apply(formatar_tempo)
             st.table(tma_atend[['Atendente', 'Média TMA']].set_index('Atendente'))
 
     else:
-        st.error("Arquivo inválido.")
+        st.error("O arquivo enviado não possui a coluna 'feedback_score'.")
