@@ -65,23 +65,24 @@ if uploaded_file is not None:
         final_df = bad_ratings[['id', 'Atendente', 'feedback_score', 'Tabulação', 'Comentário', 'created_at']]
         final_df.columns = ['ID do Atendimento', 'Atendente', 'Nota', 'Tabulação', 'Comentário', 'Data do Atendimento']
         
-        # --- FILTROS ORGANIZADOS NO TOPO (SEM BARRA LATERAL) ---
+        # --- FILTROS ORGANIZADOS POR ABAS (TABS) ---
         st.markdown("---")
-        st.subheader("🔎 Filtros de Visualização")
+        st.write("📌 **Filtros de Visualização por Categoria:**")
         
-        col_f1, col_f2, col_f3 = st.columns(3)
+        tab_atendente, tab_nota, tab_tabulacao = st.tabs(["👥 Atendentes", "⭐ Notas", "🏷️ Tabulações"])
         
-        with col_f1:
-            lista_atendentes = final_df['Atendente'].unique().tolist()
-            filtro_atendente = st.multiselect("👥 Filtrar Atendente:", lista_atendentes, default=lista_atendentes)
+        lista_atendentes = final_df['Atendente'].unique().tolist()
+        lista_notas = final_df['Nota'].unique().tolist()
+        lista_tabulacoes = final_df['Tabulação'].unique().tolist()
+        
+        with tab_atendente:
+            filtro_atendente = st.multiselect("Selecione os atendentes:", lista_atendentes, default=lista_atendentes)
             
-        with col_f2:
-            lista_notas = final_df['Nota'].unique().tolist()
-            filtro_nota = st.multiselect("⭐ Filtrar Nota:", lista_notas, default=lista_notas)
+        with tab_nota:
+            filtro_nota = st.multiselect("Selecione as notas:", lista_notas, default=lista_notas)
             
-        with col_f3:
-            lista_tabulacoes = final_df['Tabulação'].unique().tolist()
-            filtro_tabulacao = st.multiselect("🏷️ Filtrar Tabulação:", lista_tabulacoes, default=lista_tabulacoes)
+        with tab_tabulacao:
+            filtro_tabulacao = st.multiselect("Selecione as tabulações:", lista_tabulacoes, default=lista_tabulacoes)
             
         # Aplicando os filtros
         df_filtrado = final_df[
