@@ -19,7 +19,7 @@ if uploaded_file is not None:
         # TRATAMENTO INICIAL: Limpa valores nulos e garante texto string
         df['feedback_text'] = df['feedback_text'].fillna('')
         
-        # Filtra estritamente para manter APENAS quem tem comentário real (ignora vazios, espaços ou apenas números)
+        # Filtra estritamente para manter APENAS quem tem comentário real
         tem_texto = df['feedback_text'].astype(str).str.strip() != ''
         nao_e_so_numero = ~df['feedback_text'].astype(str).str.isnumeric()
         
@@ -36,29 +36,33 @@ if uploaded_file is not None:
         final_df = comentarios_reais[['id', 'Atendente', 'feedback_score', 'Tabulação', 'Comentário', 'created_at']]
         final_df.columns = ['ID do Atendimento', 'Atendente', 'Nota', 'Tabulação', 'Comentário', 'Data do Atendimento']
         
-        # --- FILTROS LATERAIS INTERATIVOS ---
-        st.sidebar.header("🔍 Filtros Dinâmicos")
-        st.sidebar.write("Refine a exibição dos comentários:")
+        # --- FILTROS NO TOPO EM CAIXAS DE SELEÇÃO COMPACTAS ---
+        st.markdown("---")
+        st.write("🔍 **Filtros de Visualização (Selecione abaixo):**")
         
-        # Filtro por Atendente
-        lista_atendentes = final_df['Atendente'].unique().tolist()
-        filtro_atendente = st.sidebar.multiselect("👥 Atendente:", lista_atendentes, default=lista_atendentes)
+        col_f1, col_f2, col_f3 = st.columns(3)
         
-        # Filtro por Nota
-        lista_notas = final_df['Nota'].unique().tolist()
-        filtro_nota = st.sidebar.multiselect("⭐ Nota:", lista_notas, default=lista_notas)
+        lista_atendentes = sorted(final_df['Atendente'].unique().tolist())
+        lista_notas = sorted(final_df['Nota'].unique().tolist())
+        lista_tabulacoes = sorted(final_df['Tabulação'].unique().tolist())
         
-        # Filtro por Tabulação
-        lista_tabulacoes = final_df['Tabulação'].unique().tolist()
-        filtro_tabulacao = st.sidebar.multiselect("🏷️ Tabulação:", lista_tabulacoes, default=lista_tabulacoes)
-        
+        with col_f1:
+            filtro_atendente = st.multiselect("👥 Atendente(s):", lista_atendentes, default=lista_atendentes)
+            
+        with col_f2:
+            filtro_nota = st.multiselect("⭐ Nota(s):", lista_notas, default=lista_notas)
+            
+        with col_f3:
+            filtro_tabulacao = st.multiselect("🏷️ Tabulação(ões):", lista_tabulacoes, default=lista_tabulacoes)
+            
         # Aplicando os filtros
         df_filtrado = final_df[
             (final_df['Atendente'].isin(filtro_atendente)) &
             (final_df['Nota'].isin(filtro_nota)) &
             (final_df['Tabulação'].isin(filtro_tabulacao))
         ]
-        # ------------------------------------
+        st.markdown("---")
+        # --------------------------------------------------------
         
         st.subheader(f"📋 Encontramos {len(df_filtrado)} atendimentos com comentários reais")
         st.dataframe(df_filtrado, use_container_width=True)
