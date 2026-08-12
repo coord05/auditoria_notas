@@ -65,31 +65,35 @@ if uploaded_file is not None:
         final_df = bad_ratings[['id', 'Atendente', 'feedback_score', 'Tabulação', 'Comentário', 'created_at']]
         final_df.columns = ['ID do Atendimento', 'Atendente', 'Nota', 'Tabulação', 'Comentário', 'Data do Atendimento']
         
-        # --- FILTROS COM MÚLTIPLA SELEÇÃO COMPACTA ---
+        # --- FILTROS COM CAIXA DE SELEÇÃO COM SETINHA (SELECTBOX) ---
         st.markdown("---")
-        st.write("🔍 **Filtrar Dados do Relatório:**")
+        st.write("🔍 **Filtrar por Item Específico:**")
         
         col_f1, col_f2, col_f3 = st.columns(3)
         
-        lista_atendentes = sorted(final_df['Atendente'].unique().tolist())
-        lista_notas = sorted(final_df['Nota'].unique().tolist())
-        lista_tabulacoes = sorted(final_df['Tabulação'].unique().tolist())
+        # Criamos listas incluindo a opção "Todos" para dar flexibilidade
+        lista_atendentes = ['Todos'] + sorted(final_df['Atendente'].unique().tolist())
+        lista_notas = ['Todos'] + sorted(final_df['Nota'].unique().tolist())
+        lista_tabulacoes = ['Todos'] + sorted(final_df['Tabulação'].unique().tolist())
         
         with col_f1:
-            filtro_atendente = st.multiselect("👥 Atendente(s):", lista_atendentes, default=lista_atendentes)
+            escolha_atendente = st.selectbox("👥 Atendente:", lista_atendentes)
             
         with col_f2:
-            filtro_nota = st.multiselect("⭐ Nota(s):", lista_notas, default=lista_notas)
+            escolha_nota = st.selectbox("⭐ Nota:", lista_notas)
             
         with col_f3:
-            filtro_tabulacao = st.multiselect("🏷️ Tabulação(ões):", lista_tabulacoes, default=lista_tabulacoes)
+            escolha_tabulacao = st.selectbox("🏷️ Tabulação:", lista_tabulacoes)
             
-        # Aplicando os filtros
-        df_filtrado = final_df[
-            (final_df['Atendente'].isin(filtro_atendente)) &
-            (final_df['Nota'].isin(filtro_nota)) &
-            (final_df['Tabulação'].isin(filtro_tabulacao))
-        ]
+        # Lógica para aplicar o filtro considerando se escolheu "Todos" ou um item específico
+        df_filtrado = final_df.copy()
+        if escolha_atendente != 'Todos':
+            df_filtrado = df_filtrado[df_filtrado['Atendente'] == escolha_atendente]
+        if escolha_nota != 'Todos':
+            df_filtrado = df_filtrado[df_filtrado['Nota'] == escolha_nota]
+        if escolha_tabulacao != 'Todos':
+            df_filtrado = df_filtrado[df_filtrado['Tabulação'] == escolha_tabulacao]
+            
         st.markdown("---")
         # --------------------------------------------------------
         
