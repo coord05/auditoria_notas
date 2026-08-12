@@ -6,7 +6,7 @@ st.set_page_config(page_title="Painel de Gestão e Auditoria", layout="wide")
 
 st.title("📊 Painel de Gestão e Operação do Suporte")
 
-# Nova função de formatação de tempo inteligente
+# Função de formatação de tempo inteligente
 def formatar_tempo(segundos):
     if pd.isna(segundos): return "0min00seg"
     segundos = int(segundos)
@@ -60,6 +60,7 @@ if uploaded_file is not None:
         final_df = df[nota_ruim | tem_palavra].copy()
         final_df['Tabulação'] = final_df['tabulation'].fillna('Sem tabulação')
         
+        st.write("🔍 **Filtros de Auditoria:**")
         lista_atendentes = sorted(final_df['Atendente'].unique().tolist())
         filtro_at = st.multiselect("Atendente:", lista_atendentes, default=lista_atendentes)
         
@@ -69,18 +70,19 @@ if uploaded_file is not None:
     with aba2:
         st.subheader("⏱️ Métricas de Tempo e Eficiência")
         
-        # Cálculos
+        # Cálculos de tempo
         df['Seg_Espera'] = (df['attended_at'] - df['created_at']).dt.total_seconds()
         df['Seg_TMA'] = (df['closed_at'] - df['attended_at']).dt.total_seconds()
         
         # Geral
         st.metric("Tempo Médio de Espera (Fila - Geral)", formatar_tempo(df['Seg_Espera'].mean()))
         
-        # Por Atendente (Somente TMA, coluna de espera removida)
+        # Por Atendente: Omitindo o índice e formatando para leitura próxima
         tma_atend = df.groupby('Atendente')[['Seg_TMA']].mean().reset_index()
         tma_atend['Média TMA'] = tma_atend['Seg_TMA'].apply(formatar_tempo)
         
-        st.dataframe(tma_atend[['Atendente', 'Média TMA']], use_container_width=True)
+        # Exibe a tabela sem a coluna técnica e com nomes colados
+        st.table(tma_atend[['Atendente', 'Média TMA']])
 
 else:
     st.info("Aguardando upload para iniciar a gestão!")
