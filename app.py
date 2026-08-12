@@ -5,7 +5,7 @@ import pandas as pd
 st.set_page_config(page_title="Painel de Auditoria de Atendimentos", layout="wide")
 
 st.title("📊 Painel de Auditoria de Atendimentos Críticos")
-st.write("Gerencie notas baixas e reclamações reais de forma simples, direta e organizada.")
+st.write("Gerencie notas baixas e reclamações reais com os nomes oficiais da equipe.")
 
 # Área de Upload
 uploaded_file = st.file_uploader("Faça o upload do seu relatório (.csv)", type=['csv'])
@@ -26,7 +26,7 @@ if uploaded_file is not None:
         # REGRA 1: Nota ruim válida (de 0 a 3, ignorando o -1)
         nota_ruim = (df['feedback_score'] >= 0) & (df['feedback_score'] <= 3)
         
-        # REGRA 2: Radar de Insatisfação Turbinado (Palavras-chave obrigatórias para considerar um comentário bom/útil)
+        # REGRA 2: Radar de Insatisfação Turbinado (Palavras-chave obrigatórias para considerar um comentário útil)
         palavras_negativas = [
             'demora', 'horas', 'dias', 'esperando', 'aguardando', 'ninguém', 'ninguem', 
             'nunca', 'cadê', 'cade', 'não recebi', 'nao recebi', 'nada', 'robô', 'robo', 
@@ -44,17 +44,13 @@ if uploaded_file is not None:
         def eh_comentario_critico(texto):
             if not texto or texto.lower() in ['nan', 'none', '']:
                 return False
-            # Ignora se for puramente numérico (ex: '0', '1', '3')
             if texto.isdigit():
                 return False
             
             texto_str = texto.lower()
-            
-            # Ignora saudações e respostas curtas
             if texto_str in ['bom dia', 'boa tarde', 'boa noite', 'ok', 'sim', 'não', 'nao', 'obrigado', 'obrigada', 'valeu']:
                 return False
                 
-            # Verifica se contém alguma das palavras-chave de reclamação
             for palavra in palavras_negativas:
                 if palavra in texto_str:
                     return True
@@ -62,13 +58,38 @@ if uploaded_file is not None:
 
         tem_comentario_critico_real = df['feedback_text_clean'].apply(eh_comentario_critico)
         
-        # FILTRO PRINCIPAL: Pega estritamente se a nota for de 0 a 3 OU se o comentário contiver as palavras-chave de reclamação
+        # FILTRO PRINCIPAL
         bad_ratings = df[nota_ruim | tem_comentario_critico_real].copy()
         
-        # Limpeza e Tratamento dos Dados
-        bad_ratings['Atendente'] = bad_ratings['agent_login'].apply(
-            lambda x: str(x).split('@')[0] if pd.notna(x) else 'Sem usuário (Em branco)'
-        )
+        # --- DICIONÁRIO DE MAPEAMENTO DOS ATENDENTES ---
+        mapeamento_nomes = {
+            'dolglas.suporte': 'Dolglas',
+            'gcastro': 'Gustavo',
+            'jonathan': 'Jonathan',
+            'jpmairinque': 'Mairinque',
+            'jpmiranda': 'Miranda',
+            'lotavio': 'Luis Otavio',
+            'luizedu': 'Luiz Eduardo',
+            'mariana': 'Mariana',
+            'matheusramao': 'Ramao',
+            'moliveira': 'Michel',
+            'preis': 'Pedro',
+            'rgomes': 'Rodolpho',
+            'ryan': 'Ryan',
+            'taicyane': 'Taicyane',
+            'tsouza': 'Tiago',
+            'luizlima': 'Luiz Felipe'
+        }
+        
+        def traduzir_atendente(login):
+            if pd.isna(login):
+                return 'Sem usuário (Em branco)'
+            # Pega a parte antes do '@' se houver
+            limpo = str(login).split('@')[0].strip()
+            # Retorna o nome mapeado, ou o próprio login caso não esteja na lista
+            return mapeamento_nomes.get(limpo, limpo)
+
+        bad_ratings['Atendente'] = bad_ratings['agent_login'].apply(traduzir_atendente)
         bad_ratings['Tabulação'] = bad_ratings['tabulation'].fillna('Sem tabulação')
         bad_ratings['Comentário'] = bad_ratings['feedback_text_clean'].replace('', 'Sem comentário')
         
@@ -106,7 +127,6 @@ if uploaded_file is not None:
         
         st.subheader(f"📋 Encontramos {len(df_filtrado)} atendimentos críticos para análise")
         
-        # Exibimos a tabela principal sem a coluna técnica oculta
         tabela_principal = df_filtrado.drop(columns=['Raw_Text'])
         st.dataframe(tabela_principal, use_container_width=True)
         
@@ -139,11 +159,24 @@ if uploaded_file is not None:
                 for _, row in ids_por_agente.iterrows():
                     st.markdown(f"**{row['Atendente']}:** {row['ID do Atendimento']}")
         
-        # --- TABELA DE LEITURA DIRETA (EXCLUSIVA PARA COMENTÁRIOS COM PALAVRAS-CHAVE) ---
+        # --- TABELA DE LEITURA DIRETA ---
         st.markdown("---")
         st.subheader("💬 Leitura Direta de IDs e Comentários Críticos")
         st.write("Mostrando exclusivamente os comentários que contêm as palavras-chave de reclamação:")
         
+        def eh_comentario_critico(texto):
+            if not texto or texto.lower() in ['nan', 'none', '']:
+                return False
+            if texto.isdigit():
+                return False
+            texto_str = texto.lower()
+            if texto_str in ['bom dia', 'boa tarde', 'boa noite', 'ok', 'sim', 'não', 'nao', 'obrigado', 'obrigada', 'valeu']:
+                return False
+            for palavra in palavras_negativas:
+                if palavra in texto_str:
+                    return True
+            return False
+
         df_apenas_comentarios = df_filtrado[df_filtrado['Raw_Text'].apply(eh_comentario_critico)].copy()
         
         tabela_comentarios = df_apenas_comentarios[['ID do Atendimento', 'Atendente', 'Comentário']]
