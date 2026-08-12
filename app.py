@@ -5,7 +5,7 @@ import pandas as pd
 st.set_page_config(page_title="Auditoria de Notas Huggy", layout="wide")
 
 st.title("📊 Painel de Auditoria de Notas Baixas")
-st.write("Arraste o arquivo CSV do sistema para gerar o relatório com os IDs, Atendentes e Tabulações.")
+st.write("Arraste o arquivo CSV do sistema para gerar o relatório direto ao ponto.")
 
 # Área de Upload
 uploaded_file = st.file_uploader("Faça o upload do seu relatório (.csv)", type=['csv'])
@@ -16,18 +16,52 @@ if uploaded_file is not None:
     
     if 'feedback_score' in df.columns:
         
-        # Garante que a coluna de texto exista para não dar erro
+        # Garante que a coluna de texto exista
         if 'feedback_text' not in df.columns:
             df['feedback_text'] = None
 
-        # REGRA 1: Nota de 0 a 3
-        nota_ruim = df['feedback_score'] <= 3
+        # REGRA 1: Nota de 0 a 3 (Ignorando o -1)
+        nota_ruim = (df['feedback_score'] >= 0) & (df['feedback_score'] <= 3)
         
-        # REGRA 2: Tem comentário escrito (e ignora se o cliente apenas digitou números como "5")
-        tem_comentario = df['feedback_text'].notna() & ~df['feedback_text'].astype(str).str.isnumeric()
+        # REGRA 2: Radar de Insatisfação Turbinado
+        palavras_negativas = [
+            # Tempo e Atendimento
+            'demora', 'horas', 'dias', 'esperando', 'aguardando', 'ninguém', 'ninguem', 
+            'nunca', 'cadê', 'cade', 'não recebi', 'nao recebi', 'nada', 'robô', 'robo', 
+            'descaso', 'falta de respeito', 'de novo', 'novamente', 'não adianta', 'nao adianta',
+            
+            # Termos Técnicos da Internet
+            'não funciona', 'nao funciona', 'caiu', 'caindo', 'oscilando', 'sem sinal', 
+            'sem internet', 'instável', 'instabilidade', 'desconectando', 'lento', 
+            'lentidão', 'ping', 'travando', 'não carrega', 'nao carrega', 'falha', 
+            'problema', 'não conecta', 'nao conecta','sem conecta', 'quedas'
+            
+            # Sentimentos e Ameaças
+            'cancelar', 'cancelamento', 'lixo', 'ruim', 'péssimo', 'pessimo', 'horrível', 
+            'horrivel', 'absurdo', 'ridículo', 'ridiculo', 'palhaçada', 'enganação', 
+            'enganacao', 'procon', 'anatel', 'processo', 'insatisfeito', 'insatisfação', 
+            'pelo amor', 'advogado'
+        ]
         
-        # Junta as duas regras: pega se tiver nota ruim OU se tiver comentário
-        bad_ratings = df[nota_ruim | tem_comentario].copy()
+        def eh_comentario_critico(texto):
+            if pd.isna(texto):
+                return False
+            texto_str = str(texto).lower().strip()
+            
+            # Ignora cumprimentos e respostas curtas sem valor analítico
+            if texto_str in ['bom dia', 'boa tarde', 'boa noite', 'ok', 'sim', 'não', 'nao', 'obrigado', 'obrigada', 'valeu']:
+                return False
+                
+            # Verifica se o comentário contém alguma das nossas palavras de alerta
+            for palavra in palavras_negativas:
+                if palavra in texto_str:
+                    return True
+            return False
+
+        tem_comentario_ruim = df['feedback_text'].apply(eh_comentario_critico)
+        
+        # Junta as duas regras de filtro
+        bad_ratings = df[nota_ruim | tem_comentario_ruim].copy()
         
         # Limpeza e Tratamento dos Dados
         bad_ratings['Atendente'] = bad_ratings['agent_login'].apply(
@@ -40,7 +74,7 @@ if uploaded_file is not None:
         final_df = bad_ratings[['id', 'Atendente', 'feedback_score', 'Tabulação', 'Comentário', 'created_at']]
         final_df.columns = ['ID do Atendimento', 'Atendente', 'Nota', 'Tabulação', 'Comentário', 'Data do Atendimento']
         
-        st.subheader(f"📋 Encontramos {len(final_df)} atendimentos para análise")
+        st.subheader(f"📋 Encontramos {len(final_df)} atendimentos críticos")
         st.dataframe(final_df, use_container_width=True)
         
         # Resumo quantitativo
