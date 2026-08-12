@@ -101,27 +101,34 @@ if uploaded_file is not None:
         st.subheader(f"📋 Encontramos {len(df_filtrado)} atendimentos (com base nos filtros)")
         st.dataframe(df_filtrado, use_container_width=True)
         
-        # Resumo quantitativo atualizado com expansores
+        # Resumo quantitativo atualizado com expansores e gráficos
         col1, col2 = st.columns(2)
+        
         with col1:
-            st.write("**Gargalos por Tabulação (Filtrado):**")
-            # Tabela enxuta apenas com as quantidades
+            st.write("**Gargalos por Tabulação:**")
             resumo_motivo = df_filtrado.groupby('Tabulação').size().reset_index(name='Quantidade')
             st.dataframe(resumo_motivo, use_container_width=True)
             
-            # Botão sanfona para revelar os IDs ocultos
+            # Gráfico de Tabulações
+            if not resumo_motivo.empty:
+                chart_data_tab = resumo_motivo.set_index('Tabulação')
+                st.bar_chart(chart_data_tab)
+            
             with st.expander("➕ Ver IDs por Tabulação"):
                 ids_por_tab = df_filtrado.groupby('Tabulação')['ID do Atendimento'].apply(lambda x: ', '.join(x.astype(str))).reset_index()
                 for _, row in ids_por_tab.iterrows():
                     st.markdown(f"**{row['Tabulação']}:** {row['ID do Atendimento']}")
                 
         with col2:
-            st.write("**Gargalos por Atendente (Filtrado):**")
-            # Tabela enxuta apenas com as quantidades
+            st.write("**Gargalos por Atendente:**")
             resumo_agente = df_filtrado.groupby('Atendente').size().reset_index(name='Quantidade')
             st.dataframe(resumo_agente, use_container_width=True)
             
-            # Botão sanfona para revelar os IDs ocultos
+            # Gráfico de Atendentes
+            if not resumo_agente.empty:
+                chart_data_age = resumo_agente.set_index('Atendente')
+                st.bar_chart(chart_data_age)
+            
             with st.expander("➕ Ver IDs por Atendente"):
                 ids_por_agente = df_filtrado.groupby('Atendente')['ID do Atendimento'].apply(lambda x: ', '.join(x.astype(str))).reset_index()
                 for _, row in ids_por_agente.iterrows():
