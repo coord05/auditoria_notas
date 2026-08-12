@@ -5,7 +5,7 @@ import pandas as pd
 st.set_page_config(page_title="Auditoria de Notas Huggy", layout="wide")
 
 st.title("📊 Painel de Auditoria de Notas Baixas")
-st.write("Arraste o arquivo CSV do sistema para gerar o relatório direto ao ponto.")
+st.write("Arraste o arquivo CSV do sistema para gerar o relatório e use o menu lateral para filtrar!")
 
 # Área de Upload
 uploaded_file = st.file_uploader("Faça o upload do seu relatório (.csv)", type=['csv'])
@@ -34,7 +34,7 @@ if uploaded_file is not None:
             'não funciona', 'nao funciona', 'caiu', 'caindo', 'oscilando', 'sem sinal', 
             'sem internet', 'instável', 'instabilidade', 'desconectando', 'lento', 
             'lentidão', 'ping', 'travando', 'não carrega', 'nao carrega', 'falha', 
-            'problema', 'não conecta', 'nao conecta','sem conecta', 'quedas'
+            'problema', 'não conecta', 'nao conecta', 'sem conecta', 'quedas',
             
             # Sentimentos e Ameaças
             'cancelar', 'cancelamento', 'lixo', 'ruim', 'péssimo', 'pessimo', 'horrível', 
@@ -74,28 +74,53 @@ if uploaded_file is not None:
         final_df = bad_ratings[['id', 'Atendente', 'feedback_score', 'Tabulação', 'Comentário', 'created_at']]
         final_df.columns = ['ID do Atendimento', 'Atendente', 'Nota', 'Tabulação', 'Comentário', 'Data do Atendimento']
         
-        st.subheader(f"📋 Encontramos {len(final_df)} atendimentos críticos")
-        st.dataframe(final_df, use_container_width=True)
+        # --- FILTROS LATERAIS INTERATIVOS ---
+        st.sidebar.header("🔍 Filtros Dinâmicos")
+        st.sidebar.write("Escolha o que deseja visualizar na tabela:")
         
-        # Resumo quantitativo
+        # Filtro por Atendente
+        lista_atendentes = final_df['Atendente'].unique().tolist()
+        filtro_atendente = st.sidebar.multiselect("👥 Atendente:", lista_atendentes, default=lista_atendentes)
+        
+        # Filtro por Nota
+        lista_notas = final_df['Nota'].unique().tolist()
+        filtro_nota = st.sidebar.multiselect("⭐ Nota:", lista_notas, default=lista_notas)
+        
+        # Filtro por Tabulação
+        lista_tabulacoes = final_df['Tabulação'].unique().tolist()
+        filtro_tabulacao = st.sidebar.multiselect("🏷️ Tabulação:", lista_tabulacoes, default=lista_tabulacoes)
+        
+        # Aplicando os filtros aos nossos dados
+        df_filtrado = final_df[
+            (final_df['Atendente'].isin(filtro_atendente)) &
+            (final_df['Nota'].isin(filtro_nota)) &
+            (final_df['Tabulação'].isin(filtro_tabulacao))
+        ]
+        # ------------------------------------
+        
+        st.subheader(f"📋 Encontramos {len(df_filtrado)} atendimentos (com base nos filtros)")
+        st.dataframe(df_filtrado, use_container_width=True)
+        
+        # Resumo quantitativo atualizado de acordo com o filtro
         col1, col2 = st.columns(2)
         with col1:
-            st.write("**Gargalos por Tabulação:**")
-            resumo_motivo = final_df.groupby('Tabulação').size().reset_index(name='Quantidade')
+            st.write("**Gargalos por Tabulação (Filtrado):**")
+            resumo_motivo = df_filtrado.groupby('Tabulação').size().reset_index(name='Quantidade')
             st.dataframe(resumo_motivo, use_container_width=True)
             
         with col2:
-            st.write("**Gargalos por Atendente:**")
-            resumo_agente = final_df.groupby('Atendente').size().reset_index(name='Quantidade')
+            st.write("**Gargalos por Atendente (Filtrado):**")
+            resumo_agente = df_filtrado.groupby('Atendente').size().reset_index(name='Quantidade')
             st.dataframe(resumo_agente, use_container_width=True)
         
-        # Botão para baixar o relatório tratado
-        csv_export = final_df.to_csv(index=False).encode('utf-8')
+        # Botão para baixar o relatório já filtrado
+        csv_export = df_filtrado.to_csv(index=False).encode('utf-8')
         st.download_button(
-            label="📥 Exportar Relatório Tratado para Planilha (CSV)",
+            label="📥 Exportar Relatório Filtrado (CSV)",
             data=csv_export,
-            file_name="relatorio_notas_ruins_tratado.csv",
+            file_name="relatorio_notas_filtrado.csv",
             mime="text/csv",
         )
     else:
         st.error("O arquivo enviado não possui a coluna 'feedback_score'. Verifique se é o relatório correto.")
+    
