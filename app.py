@@ -2,10 +2,10 @@ import streamlit as st
 import pandas as pd
 
 # Configuração da página
-st.set_page_config(page_title="Painel de Auditoria de Comentários", layout="wide")
+st.set_page_config(page_title="Painel de Auditoria de Atendimentos", layout="wide")
 
-st.title("📊 Painel de Auditoria de Comentários dos Clientes")
-st.write("Exibindo exclusivamente os atendimentos que possuem comentários reais dos clientes.")
+st.title("📊 Painel de Auditoria de Atendimentos Críticos")
+st.write("Gerencie notas baixas e comentários relevantes de forma simples, direta e organizada.")
 
 # Área de Upload
 uploaded_file = st.file_uploader("Faça o upload do seu relatório (.csv)", type=['csv'])
@@ -14,26 +14,42 @@ if uploaded_file is not None:
     # Lendo o arquivo
     df = pd.read_csv(uploaded_file)
     
-    if 'feedback_score' in df.columns and 'feedback_text' in df.columns:
+    if 'feedback_score' in df.columns:
         
-        # TRATAMENTO INICIAL: Limpa valores nulos e garante texto string
-        df['feedback_text'] = df['feedback_text'].fillna('')
+        # Garante que a coluna de texto exista
+        if 'feedback_text' not in df.columns:
+            df['feedback_text'] = None
+
+        # Tratamento inicial do texto do comentário
+        df['feedback_text_clean'] = df['feedback_text'].fillna('').astype(str).str.strip()
+
+        # CONDIÇÃO 1: Nota ruim válida (de 0 a 3, ignorando o -1)
+        nota_ruim = (df['feedback_score'] >= 0) & (df['feedback_score'] <= 3)
         
-        # Filtra estritamente para manter APENAS quem tem comentário real
-        tem_texto = df['feedback_text'].astype(str).str.strip() != ''
-        nao_e_so_numero = ~df['feedback_text'].astype(str).str.isnumeric()
+        # CONDIÇÃO 2: Comentário real (não vazio, não é só número/espaço e não é apenas saudação curta irrelevante)
+        def eh_comentario_valido(texto):
+            if not texto or texto.lower() in ['nan', 'none', '']:
+                return False
+            if texto.isnumeric():
+                return False
+            if texto.lower() in ['bom dia', 'boa tarde', 'boa noite', 'ok', 'sim', 'não', 'nao', 'obrigado', 'obrigada', 'valeu']:
+                return False
+            return True
+
+        tem_comentario_util = df['feedback_text_clean'].apply(eh_comentario_valido)
         
-        comentarios_reais = df[tem_texto & nao_e_so_numero].copy()
+        # FILTRO PRINCIPAL: Pega se a nota for de 0 a 3 OU se tiver um comentário útil de fato (excluindo -1 sem comentário)
+        bad_ratings = df[nota_ruim | tem_comentario_util].copy()
         
         # Limpeza e Tratamento dos Dados
-        comentarios_reais['Atendente'] = comentarios_reais['agent_login'].apply(
+        bad_ratings['Atendente'] = bad_ratings['agent_login'].apply(
             lambda x: str(x).split('@')[0] if pd.notna(x) else 'Sem usuário (Em branco)'
         )
-        comentarios_reais['Tabulação'] = comentarios_reais['tabulation'].fillna('Sem tabulação')
-        comentarios_reais['Comentário'] = comentarios_reais['feedback_text'].astype(str).str.strip()
+        bad_ratings['Tabulação'] = bad_ratings['tabulation'].fillna('Sem tabulação')
+        bad_ratings['Comentário'] = bad_ratings['feedback_text_clean'].replace('', 'Sem comentário')
         
         # Selecionando e renomeando as colunas
-        final_df = comentarios_reais[['id', 'Atendente', 'feedback_score', 'Tabulação', 'Comentário', 'created_at']]
+        final_df = bad_ratings[['id', 'Atendente', 'feedback_score', 'Tabulação', 'Comentário', 'created_at']]
         final_df.columns = ['ID do Atendimento', 'Atendente', 'Nota', 'Tabulação', 'Comentário', 'Data do Atendimento']
         
         # --- FILTROS NO TOPO EM CAIXAS DE SELEÇÃO COMPACTAS ---
@@ -64,7 +80,7 @@ if uploaded_file is not None:
         st.markdown("---")
         # --------------------------------------------------------
         
-        st.subheader(f"📋 Encontramos {len(df_filtrado)} atendimentos com comentários reais")
+        st.subheader(f"📋 Encontramos {len(df_filtrado)} atendimentos críticos para análise")
         st.dataframe(df_filtrado, use_container_width=True)
         
         # Resumo quantitativo com gráficos e expansores
@@ -106,10 +122,10 @@ if uploaded_file is not None:
         # Botão para baixar o relatório já filtrado
         csv_export = df_filtrado.to_csv(index=False).encode('utf-8')
         st.download_button(
-            label="📥 Exportar Relatório de Comentários (CSV)",
+            label="📥 Exportar Relatório Filtrado (CSV)",
             data=csv_export,
-            file_name="relatorio_comentarios_clientes.csv",
+            file_name="relatorio_atendimentos_filtrado.csv",
             mime="text/csv",
         )
     else:
-        st.error("O arquivo enviado não possui as colunas necessárias ('feedback_score' e 'feedback_text'). Verifique o relatório.")
+        st.error("O arquivo enviado não possui a coluna 'feedback_score'. Verifique se é o relatório correto.")
