@@ -5,7 +5,7 @@ import pandas as pd
 st.set_page_config(page_title="Painel de Auditoria de Atendimentos", layout="wide")
 
 st.title("📊 Painel de Auditoria de Atendimentos Críticos")
-st.write("Gerencie notas baixas e comentários relevantes de forma simples, direta e organizada.")
+st.write("Gerencie notas baixas e reclamações reais de forma simples, direta e organizada.")
 
 # Área de Upload
 uploaded_file = st.file_uploader("Faça o upload do seu relatório (.csv)", type=['csv'])
@@ -23,24 +23,47 @@ if uploaded_file is not None:
         # Tratamento inicial do texto do comentário
         df['feedback_text_clean'] = df['feedback_text'].fillna('').astype(str).str.strip()
 
-        # CONDIÇÃO 1: Nota ruim válida (de 0 a 3, ignorando o -1)
+        # REGRA 1: Nota ruim válida (de 0 a 3, ignorando o -1)
         nota_ruim = (df['feedback_score'] >= 0) & (df['feedback_score'] <= 3)
         
-        # CONDIÇÃO 2: Comentário real (não vazio, não é só número/espaço e não é saudação curta)
-        def eh_comentario_valido(texto):
+        # REGRA 2: Radar de Insatisfação Turbinado (Palavras-chave obrigatórias para considerar um comentário bom/útil)
+        palavras_negativas = [
+            'demora', 'horas', 'dias', 'esperando', 'aguardando', 'ninguém', 'ninguem', 
+            'nunca', 'cadê', 'cade', 'não recebi', 'nao recebi', 'nada', 'robô', 'robo', 
+            'descaso', 'falta de respeito', 'de novo', 'novamente', 'não adianta', 'nao adianta',
+            'não funciona', 'nao funciona', 'caiu', 'caindo', 'oscilando', 'sem sinal', 
+            'sem internet', 'instável', 'instabilidade', 'desconectando', 'lento', 
+            'lentidão', 'ping', 'travando', 'não carrega', 'nao carrega', 'falha', 
+            'problema', 'não conecta', 'nao conecta', 'sem conecta', 'quedas',
+            'cancelar', 'cancelamento', 'lixo', 'ruim', 'péssimo', 'pessimo', 'horrível', 
+            'horrivel', 'absurdo', 'ridículo', 'ridiculo', 'palhaçada', 'enganação', 
+            'enganacao', 'procon', 'anatel', 'processo', 'insatisfeito', 'insatisfação', 
+            'pelo amor', 'advogado'
+        ]
+        
+        def eh_comentario_critico(texto):
             if not texto or texto.lower() in ['nan', 'none', '']:
                 return False
-            # Bloqueia se for puramente numérico (ex: '0', '1', '3')
+            # Ignora se for puramente numérico (ex: '0', '1', '3')
             if texto.isdigit():
                 return False
-            if texto.lower() in ['bom dia', 'boa tarde', 'boa noite', 'ok', 'sim', 'não', 'nao', 'obrigado', 'obrigada', 'valeu']:
+            
+            texto_str = texto.lower()
+            
+            # Ignora saudações e respostas curtas
+            if texto_str in ['bom dia', 'boa tarde', 'boa noite', 'ok', 'sim', 'não', 'nao', 'obrigado', 'obrigada', 'valeu']:
                 return False
-            return True
+                
+            # Verifica se contém alguma das palavras-chave de reclamação
+            for palavra in palavras_negativas:
+                if palavra in texto_str:
+                    return True
+            return False
 
-        tem_comentario_util = df['feedback_text_clean'].apply(eh_comentario_valido)
+        tem_comentario_critico_real = df['feedback_text_clean'].apply(eh_comentario_critico)
         
-        # FILTRO PRINCIPAL: Pega se a nota for de 0 a 3 OU se tiver um comentário útil de fato
-        bad_ratings = df[nota_ruim | tem_comentario_util].copy()
+        # FILTRO PRINCIPAL: Pega estritamente se a nota for de 0 a 3 OU se o comentário contiver as palavras-chave de reclamação
+        bad_ratings = df[nota_ruim | tem_comentario_critico_real].copy()
         
         # Limpeza e Tratamento dos Dados
         bad_ratings['Atendente'] = bad_ratings['agent_login'].apply(
@@ -116,21 +139,12 @@ if uploaded_file is not None:
                 for _, row in ids_por_agente.iterrows():
                     st.markdown(f"**{row['Atendente']}:** {row['ID do Atendimento']}")
         
-        # --- TABELA DE LEITURA DIRETA (EXCLUSIVA PARA COMENTÁRIOS REAIS EM TEXTO) ---
+        # --- TABELA DE LEITURA DIRETA (EXCLUSIVA PARA COMENTÁRIOS COM PALAVRAS-CHAVE) ---
         st.markdown("---")
-        st.subheader("💬 Leitura Direta de IDs e Comentários Reais")
-        st.write("Mostrando exclusivamente os atendimentos que contêm um texto digitado de fato pelo cliente:")
+        st.subheader("💬 Leitura Direta de IDs e Comentários Críticos")
+        st.write("Mostrando exclusivamente os comentários que contêm as palavras-chave de reclamação:")
         
-        def eh_texto_real(val):
-            s = str(val).strip()
-            if s in ['', 'Sem comentário', 'nan', 'None']:
-                return False
-            # Ignora se for estritamente numérico
-            if s.isdigit():
-                return False
-            return True
-
-        df_apenas_comentarios = df_filtrado[df_filtrado['Raw_Text'].apply(eh_texto_real)].copy()
+        df_apenas_comentarios = df_filtrado[df_filtrado['Raw_Text'].apply(eh_comentario_critico)].copy()
         
         tabela_comentarios = df_apenas_comentarios[['ID do Atendimento', 'Atendente', 'Comentário']]
         st.dataframe(tabela_comentarios, use_container_width=True)
