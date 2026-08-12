@@ -2,10 +2,10 @@ import streamlit as st
 import pandas as pd
 
 # Configuração da página
-st.set_page_config(page_title="Auditoria de Notas Huggy", layout="wide")
+st.set_page_config(page_title="Painel de Auditoria de Notas", layout="wide")
 
 st.title("📊 Painel de Auditoria de Notas Baixas")
-st.write("Arraste o arquivo CSV do sistema para gerar o relatório e use o menu lateral para filtrar!")
+st.write("Gerencie os atendimentos críticos de forma simples, direta e organizada.")
 
 # Área de Upload
 uploaded_file = st.file_uploader("Faça o upload do seu relatório (.csv)", type=['csv'])
@@ -25,18 +25,13 @@ if uploaded_file is not None:
         
         # REGRA 2: Radar de Insatisfação Turbinado
         palavras_negativas = [
-            # Tempo e Atendimento
             'demora', 'horas', 'dias', 'esperando', 'aguardando', 'ninguém', 'ninguem', 
             'nunca', 'cadê', 'cade', 'não recebi', 'nao recebi', 'nada', 'robô', 'robo', 
             'descaso', 'falta de respeito', 'de novo', 'novamente', 'não adianta', 'nao adianta',
-            
-            # Termos Técnicos da Internet
             'não funciona', 'nao funciona', 'caiu', 'caindo', 'oscilando', 'sem sinal', 
             'sem internet', 'instável', 'instabilidade', 'desconectando', 'lento', 
             'lentidão', 'ping', 'travando', 'não carrega', 'nao carrega', 'falha', 
             'problema', 'não conecta', 'nao conecta', 'sem conecta', 'quedas',
-            
-            # Sentimentos e Ameaças
             'cancelar', 'cancelamento', 'lixo', 'ruim', 'péssimo', 'pessimo', 'horrível', 
             'horrivel', 'absurdo', 'ridículo', 'ridiculo', 'palhaçada', 'enganação', 
             'enganacao', 'procon', 'anatel', 'processo', 'insatisfeito', 'insatisfação', 
@@ -47,12 +42,8 @@ if uploaded_file is not None:
             if pd.isna(texto):
                 return False
             texto_str = str(texto).lower().strip()
-            
-            # Ignora cumprimentos e respostas curtas sem valor analítico
             if texto_str in ['bom dia', 'boa tarde', 'boa noite', 'ok', 'sim', 'não', 'nao', 'obrigado', 'obrigada', 'valeu']:
                 return False
-                
-            # Verifica se o comentário contém alguma das nossas palavras de alerta
             for palavra in palavras_negativas:
                 if palavra in texto_str:
                     return True
@@ -74,60 +65,59 @@ if uploaded_file is not None:
         final_df = bad_ratings[['id', 'Atendente', 'feedback_score', 'Tabulação', 'Comentário', 'created_at']]
         final_df.columns = ['ID do Atendimento', 'Atendente', 'Nota', 'Tabulação', 'Comentário', 'Data do Atendimento']
         
-        # --- FILTROS LATERAIS INTERATIVOS ---
-        st.sidebar.header("🔍 Filtros Dinâmicos")
-        st.sidebar.write("Escolha o que deseja visualizar na tabela:")
+        # --- FILTROS ORGANIZADOS NO TOPO (SEM BARRA LATERAL) ---
+        st.markdown("---")
+        st.subheader("🔎 Filtros de Visualização")
         
-        # Filtro por Atendente
-        lista_atendentes = final_df['Atendente'].unique().tolist()
-        filtro_atendente = st.sidebar.multiselect("👥 Atendente:", lista_atendentes, default=lista_atendentes)
+        col_f1, col_f2, col_f3 = st.columns(3)
         
-        # Filtro por Nota
-        lista_notas = final_df['Nota'].unique().tolist()
-        filtro_nota = st.sidebar.multiselect("⭐ Nota:", lista_notas, default=lista_notas)
-        
-        # Filtro por Tabulação
-        lista_tabulacoes = final_df['Tabulação'].unique().tolist()
-        filtro_tabulacao = st.sidebar.multiselect("🏷️ Tabulação:", lista_tabulacoes, default=lista_tabulacoes)
-        
-        # Aplicando os filtros aos nossos dados
+        with col_f1:
+            lista_atendentes = final_df['Atendente'].unique().tolist()
+            filtro_atendente = st.multiselect("👥 Filtrar Atendente:", lista_atendentes, default=lista_atendentes)
+            
+        with col_f2:
+            lista_notas = final_df['Nota'].unique().tolist()
+            filtro_nota = st.multiselect("⭐ Filtrar Nota:", lista_notas, default=lista_notas)
+            
+        with col_f3:
+            lista_tabulacoes = final_df['Tabulação'].unique().tolist()
+            filtro_tabulacao = st.multiselect("🏷️ Filtrar Tabulação:", lista_tabulacoes, default=lista_tabulacoes)
+            
+        # Aplicando os filtros
         df_filtrado = final_df[
             (final_df['Atendente'].isin(filtro_atendente)) &
             (final_df['Nota'].isin(filtro_nota)) &
             (final_df['Tabulação'].isin(filtro_tabulacao))
         ]
-        # ------------------------------------
+        st.markdown("---")
+        # --------------------------------------------------------
         
         st.subheader(f"📋 Encontramos {len(df_filtrado)} atendimentos (com base nos filtros)")
         st.dataframe(df_filtrado, use_container_width=True)
         
-        # Resumo quantitativo atualizado com expansores e gráficos
-        col1, col2 = st.columns(2)
+        # Resumo quantitativo com gráficos e expansores limpos
+        col_r1, col_r2 = st.columns(2)
         
-        with col1:
+        with col_r1:
             st.write("**Gargalos por Tabulação:**")
             resumo_motivo = df_filtrado.groupby('Tabulação').size().reset_index(name='Quantidade')
             st.dataframe(resumo_motivo, use_container_width=True)
             
-            # Gráfico de Tabulações
             if not resumo_motivo.empty:
-                chart_data_tab = resumo_motivo.set_index('Tabulação')
-                st.bar_chart(chart_data_tab)
+                st.bar_chart(resumo_motivo.set_index('Tabulação'))
             
             with st.expander("➕ Ver IDs por Tabulação"):
                 ids_por_tab = df_filtrado.groupby('Tabulação')['ID do Atendimento'].apply(lambda x: ', '.join(x.astype(str))).reset_index()
                 for _, row in ids_por_tab.iterrows():
                     st.markdown(f"**{row['Tabulação']}:** {row['ID do Atendimento']}")
                 
-        with col2:
+        with col_r2:
             st.write("**Gargalos por Atendente:**")
             resumo_agente = df_filtrado.groupby('Atendente').size().reset_index(name='Quantidade')
             st.dataframe(resumo_agente, use_container_width=True)
             
-            # Gráfico de Atendentes
             if not resumo_agente.empty:
-                chart_data_age = resumo_agente.set_index('Atendente')
-                st.bar_chart(chart_data_age)
+                st.bar_chart(resumo_agente.set_index('Atendente'))
             
             with st.expander("➕ Ver IDs por Atendente"):
                 ids_por_agente = df_filtrado.groupby('Atendente')['ID do Atendimento'].apply(lambda x: ', '.join(x.astype(str))).reset_index()
