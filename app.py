@@ -26,7 +26,7 @@ if uploaded_file is not None:
         # REGRA 1: Nota ruim válida (de 0 a 3, ignorando o -1)
         nota_ruim = (df['feedback_score'] >= 0) & (df['feedback_score'] <= 3)
         
-        # REGRA 2: Radar de Insatisfação Turbinado (Palavras-chave obrigatórias para considerar um comentário útil)
+        # REGRA 2: Radar de Insatisfação Turbinado (Palavras-chave obrigatórias)
         palavras_negativas = [
             'demora', 'horas', 'dias', 'esperando', 'aguardando', 'ninguém', 'ninguem', 
             'nunca', 'cadê', 'cade', 'não recebi', 'nao recebi', 'nada', 'robô', 'robo', 
@@ -46,11 +46,9 @@ if uploaded_file is not None:
                 return False
             if texto.isdigit():
                 return False
-            
             texto_str = texto.lower()
             if texto_str in ['bom dia', 'boa tarde', 'boa noite', 'ok', 'sim', 'não', 'nao', 'obrigado', 'obrigada', 'valeu']:
                 return False
-                
             for palavra in palavras_negativas:
                 if palavra in texto_str:
                     return True
@@ -61,9 +59,9 @@ if uploaded_file is not None:
         # FILTRO PRINCIPAL
         bad_ratings = df[nota_ruim | tem_comentario_critico_real].copy()
         
-        # --- DICIONÁRIO DE MAPEAMENTO DOS ATENDENTES ---
+        # --- DICIONÁRIO DE MAPEAMENTO DOS ATENDENTES (Blindado) ---
         mapeamento_nomes = {
-            'dolglas.suporte': 'Dolglas',
+            'dolglas': 'Dolglas',
             'gcastro': 'Gustavo',
             'jonathan': 'Jonathan',
             'jpmairinque': 'Mairinque',
@@ -84,10 +82,17 @@ if uploaded_file is not None:
         def traduzir_atendente(login):
             if pd.isna(login):
                 return 'Sem usuário (Em branco)'
-            # Pega a parte antes do '@' se houver
-            limpo = str(login).split('@')[0].strip()
-            # Retorna o nome mapeado, ou o próprio login caso não esteja na lista
-            return mapeamento_nomes.get(limpo, limpo)
+            
+            # Pega tudo antes do '@' e joga para minúsculo para evitar conflito de maiúsculas/minúsculas
+            login_str = str(login).split('@')[0].strip().lower()
+            
+            # Varre o dicionário para ver se o login contém o identificador do atendente
+            for chave, nome_oficial in mapeamento_nomes.items():
+                if chave in login_str:
+                    return nome_oficial
+                    
+            # Se não achar nenhuma correspondência exata, retorna o login limpo original
+            return login_str
 
         bad_ratings['Atendente'] = bad_ratings['agent_login'].apply(traduzir_atendente)
         bad_ratings['Tabulação'] = bad_ratings['tabulation'].fillna('Sem tabulação')
