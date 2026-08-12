@@ -26,11 +26,12 @@ if uploaded_file is not None:
         # CONDIÇÃO 1: Nota ruim válida (de 0 a 3, ignorando o -1)
         nota_ruim = (df['feedback_score'] >= 0) & (df['feedback_score'] <= 3)
         
-        # CONDIÇÃO 2: Comentário real (não vazio, não é só número/espaço e não é apenas saudação curta irrelevante)
+        # CONDIÇÃO 2: Comentário real (não vazio, não é só número/espaço e não é saudação curta)
         def eh_comentario_valido(texto):
             if not texto or texto.lower() in ['nan', 'none', '']:
                 return False
-            if texto.isnumeric():
+            # Bloqueia se for puramente numérico (ex: '0', '1', '3')
+            if texto.isdigit():
                 return False
             if texto.lower() in ['bom dia', 'boa tarde', 'boa noite', 'ok', 'sim', 'não', 'nao', 'obrigado', 'obrigada', 'valeu']:
                 return False
@@ -38,7 +39,7 @@ if uploaded_file is not None:
 
         tem_comentario_util = df['feedback_text_clean'].apply(eh_comentario_valido)
         
-        # FILTRO PRINCIPAL: Pega se a nota for de 0 a 3 OU se tiver um comentário útil de fato (excluindo -1 sem comentário)
+        # FILTRO PRINCIPAL: Pega se a nota for de 0 a 3 OU se tiver um comentário útil de fato
         bad_ratings = df[nota_ruim | tem_comentario_util].copy()
         
         # Limpeza e Tratamento dos Dados
@@ -48,9 +49,9 @@ if uploaded_file is not None:
         bad_ratings['Tabulação'] = bad_ratings['tabulation'].fillna('Sem tabulação')
         bad_ratings['Comentário'] = bad_ratings['feedback_text_clean'].replace('', 'Sem comentário')
         
-        # Selecionando e renomeando as colunas
-        final_df = bad_ratings[['id', 'Atendente', 'feedback_score', 'Tabulação', 'Comentário', 'created_at']]
-        final_df.columns = ['ID do Atendimento', 'Atendente', 'Nota', 'Tabulação', 'Comentário', 'Data do Atendimento']
+        # Selecionando e renomeando as colunas principais
+        final_df = bad_ratings[['id', 'Atendente', 'feedback_score', 'Tabulação', 'Comentário', 'created_at', 'feedback_text_clean']]
+        final_df.columns = ['ID do Atendimento', 'Atendente', 'Nota', 'Tabulação', 'Comentário', 'Data do Atendimento', 'Raw_Text']
         
         # --- FILTROS NO TOPO EM CAIXAS DE SELEÇÃO COMPACTAS ---
         st.markdown("---")
@@ -81,7 +82,10 @@ if uploaded_file is not None:
         # --------------------------------------------------------
         
         st.subheader(f"📋 Encontramos {len(df_filtrado)} atendimentos críticos para análise")
-        st.dataframe(df_filtrado, use_container_width=True)
+        
+        # Exibimos a tabela principal sem a coluna técnica oculta
+        tabela_principal = df_filtrado.drop(columns=['Raw_Text'])
+        st.dataframe(tabela_principal, use_container_width=True)
         
         # Resumo quantitativo com gráficos e expansores
         col1, col2 = st.columns(2)
@@ -112,15 +116,28 @@ if uploaded_file is not None:
                 for _, row in ids_por_agente.iterrows():
                     st.markdown(f"**{row['Atendente']}:** {row['ID do Atendimento']}")
         
-        # --- TABELA DE LEITURA DIRETA ---
+        # --- TABELA DE LEITURA DIRETA (EXCLUSIVA PARA COMENTÁRIOS REAIS EM TEXTO) ---
         st.markdown("---")
-        st.subheader("💬 Leitura Direta de IDs e Comentários")
-        tabela_comentarios = df_filtrado[['ID do Atendimento', 'Atendente', 'Comentário']]
+        st.subheader("💬 Leitura Direta de IDs e Comentários Reais")
+        st.write("Mostrando exclusivamente os atendimentos que contêm um texto digitado de fato pelo cliente:")
+        
+        def eh_texto_real(val):
+            s = str(val).strip()
+            if s in ['', 'Sem comentário', 'nan', 'None']:
+                return False
+            # Ignora se for estritamente numérico
+            if s.isdigit():
+                return False
+            return True
+
+        df_apenas_comentarios = df_filtrado[df_filtrado['Raw_Text'].apply(eh_texto_real)].copy()
+        
+        tabela_comentarios = df_apenas_comentarios[['ID do Atendimento', 'Atendente', 'Comentário']]
         st.dataframe(tabela_comentarios, use_container_width=True)
-        # --------------------------------
+        # ------------------------------------------------------------------------
 
         # Botão para baixar o relatório já filtrado
-        csv_export = df_filtrado.to_csv(index=False).encode('utf-8')
+        csv_export = tabela_principal.to_csv(index=False).encode('utf-8')
         st.download_button(
             label="📥 Exportar Relatório Filtrado (CSV)",
             data=csv_export,
