@@ -90,9 +90,24 @@ if uploaded_file is not None:
             ]
             
             st.subheader(f"📋 Encontramos {len(df_filtrado)} atendimentos críticos para análise")
-            st.dataframe(df_filtrado.drop(columns=['Raw_Text']), use_container_width=True)
+            
+            # --- SEPARAÇÃO POR COLABORADOR (EXIBIÇÃO LIMPA E ORGANIZADA) ---
+            atendentes_filtrados = sorted(df_filtrado['Atendente'].unique().tolist())
+            
+            if not atendentes_filtrados:
+                st.info("Nenhum atendimento encontrado com os filtros selecionados.")
+            else:
+                for colaborador in atendentes_filtrados:
+                    df_colab = df_filtrado[df_filtrado['Atendente'] == colaborador]
+                    
+                    with st.expander(f"👤 {colaborador} ({len(df_colab)} atendimentos)", expanded=True):
+                        # Seleciona estritamente: ID, Nota, Comentário, Tabulação
+                        tabela_colab = df_colab[['ID do Atendimento', 'Nota', 'Comentário', 'Tabulação']]
+                        st.dataframe(tabela_colab, use_container_width=True, hide_index=True)
+            # ----------------------------------------------------------------
             
             # Gráficos e Expansores de IDs
+            st.markdown("---")
             g1, g2 = st.columns(2)
             with g1:
                 st.write("**Gargalos por Tabulação:**")
