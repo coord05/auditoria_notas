@@ -3,20 +3,25 @@ import pandas as pd
 import re
 
 # ==============================================================================
-# CONFIGURAÇÃO DA PÁGINA
+# 1. CONFIGURAÇÃO DA PÁGINA
 # ==============================================================================
-st.set_page_config(page_title="Painel de Gestão e Auditoria", layout="wide")
+st.set_page_config(
+    page_title="Painel de Gestão e Auditoria",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
 
 # ==============================================================================
-# FUNÇÕES AUXILIARES / UTILITÁRIAS
+# 2. FUNÇÕES AUXILIARES / UTILITÁRIAS
 # ==============================================================================
 def formatar_tempo(segundos):
     """
-    Converte um valor numérico em segundos para uma string legível no formato 'Xh Ymin Zseg'.
-    Retorna '0min00seg' para valores nulos ou menores/iguais a zero.
+    Converte segundos em uma string legível: 'Xh Ymin Zseg' ou 'Xmin Yseg'.
+    Valores nulos, menores ou iguais a zero retornam '0min00seg'.
     """
     if pd.isna(segundos) or segundos <= 0:
         return "0min00seg"
+    
     segundos = int(segundos)
     h = segundos // 3600
     m = (segundos % 3600) // 60
@@ -27,7 +32,7 @@ def formatar_tempo(segundos):
     return f"{m}min{s:02d}seg"
 
 
-# Mapeamento de Logins para Nomes Legíveis
+# Mapeamento de logins para exibição dos nomes dos colaboradores
 MAPEAMENTO_NOMES = {
     'dolglas': 'Dolglas', 'gcastro': 'Gustavo', 'jonathan': 'Jonathan',
     'jpmairinque': 'Mairinque', 'jpmiranda': 'Miranda', 'lotavio': 'Luis Otavio',
@@ -37,7 +42,7 @@ MAPEAMENTO_NOMES = {
 }
 
 def traduzir_atendente(login):
-    """Extrai o nome do atendente com base no login ou e-mail."""
+    """Identifica o atendente correspondente a partir do login ou e-mail."""
     if pd.isna(login):
         return None
     login_str = str(login).split('@')[0].strip().lower()
@@ -46,7 +51,7 @@ def traduzir_atendente(login):
             return nome
     return None
 
-# Palavras-chave críticas para análise textual
+# Lista de palavras-chave para identificação de feedbacks negativos
 PALAVRAS_NEGATIVAS = [
     'demora', 'horas', 'dias', 'esperando', 'aguardando', 'ninguém', 'ninguem', 'nunca',
     'cadê', 'cade', 'não recebi', 'nao recebi', 'nada', 'robô', 'robo', 'descaso',
@@ -60,16 +65,18 @@ PALAVRAS_NEGATIVAS = [
     'processo', 'insatisfeito', 'insatisfação', 'pelo amor', 'advogado'
 ]
 
-# Expressão regular para busca rápida de palavras-chave
-PADRAO_PALAVRAS_CRITICAS = re.compile(r'|'.join(r'\b' + re.escape(p) + r'\b' for p in PALAVRAS_NEGATIVAS), re.IGNORECASE)
+PADRAO_PALAVRAS_CRITICAS = re.compile(
+    r'|'.join(r'\b' + re.escape(p) + r'\b' for p in PALAVRAS_NEGATIVAS),
+    re.IGNORECASE
+)
 
 def eh_comentario_critico(texto):
-    """Valida se o comentário contém termos de insatisfação."""
+    """Verifica se a mensagem contém termos críticos ou de insatisfação."""
     if not texto or str(texto).lower() in ['nan', 'none', '']:
         return False
     texto_str = str(texto).strip().lower()
     
-    # Descarta respostas genéricas curtas ou apenas números
+    # Ignora mensagens padrão ou vazias
     if texto_str.isdigit() or texto_str in ['bom dia', 'boa tarde', 'boa noite', 'ok', 'sim', 'não', 'nao', 'obrigado', 'obrigada', 'valeu']:
         return False
         
@@ -77,40 +84,48 @@ def eh_comentario_critico(texto):
 
 
 # ==============================================================================
-# EXECUÇÃO PRINCIPAL
+# 3. INTERFACE E CARREGAMENTO DE ARQUIVOS
 # ==============================================================================
 st.title("📊 Painel de Gestão e Operação do Suporte")
 
 uploaded_file = st.file_uploader("Faça o upload do relatório (.csv)", type=['csv'])
 
 if uploaded_file is not None:
-    df = pd.read_csv(uploaded_file)
-    
-    # 1. Validação de colunas essenciais no arquivo
+    try:
+        df = pd.read_csv(uploaded_file)
+    except Exception as e:
+        st.error(f"Erro ao ler o arquivo CSV: {e}")
+        st.stop()
+
+    # Validação de colunas mínimas
     colunas_obrigatorias = ['id', 'feedback_score', 'agent_login']
     colunas_faltantes = [col for col in colunas_obrigatorias if col not in df.columns]
     
     if colunas_faltantes:
-        st.error(f"Erro: O arquivo CSV precisa conter as colunas: {', '.join(colunas_faltantes)}")
+        st.error(f"Erro: O arquivo precisa conter as seguintes colunas: {', '.join(colunas_faltantes)}")
     else:
-        # 2. Tratamento e Normalização dos Dados
+        # Tratamento de datas com segurança
         for col in ['created_at', 'attended_at', 'closed_at']:
             if col in df.columns:
                 df[col] = pd.to_datetime(df[col], errors='coerce')
-        
+            else:
+                df[col] = pd.NaT
+
+        # Tratamento de colunas de texto
         if 'feedback_text' not in df.columns:
             df['feedback_text'] = ""
-            
         if 'tabulation' not in df.columns:
             df['tabulation'] = "Sem tabulação"
 
         df['feedback_text_clean'] = df['feedback_text'].fillna('').astype(str).str.strip()
         df['Atendente'] = df['agent_login'].apply(traduzir_atendente)
         
-        # Filtra apenas registros com atendentes mapeados
+        # Filtro com apenas atendentes mapeados
         df_mapeado = df[df['Atendente'].notna()].copy()
 
-        # 3. Lógica de Auditoria (Apenas para a Aba 1)
+        # ==============================================================================
+        # 4. PROCESSAMENTO DA AUDITORIA (ABA 1)
+        # ==============================================================================
         nota_ruim = (df_mapeado['feedback_score'] >= 0) & (df_mapeado['feedback_score'] <= 3)
         tem_comentario_critico_real = df_mapeado['feedback_text_clean'].apply(eh_comentario_critico)
         
@@ -121,12 +136,14 @@ if uploaded_file is not None:
         final_df = bad_ratings[['id', 'Atendente', 'feedback_score', 'Tabulação', 'Comentário', 'created_at', 'feedback_text_clean']].copy()
         final_df.columns = ['ID do Atendimento', 'Atendente', 'Nota', 'Tabulação', 'Comentário', 'Data do Atendimento', 'Raw_Text']
 
-        # 4. Construção das Abas da Interface
+        # ==============================================================================
+        # 5. CONSTRUÇÃO DAS ABAS
+        # ==============================================================================
         aba1, aba2 = st.tabs(["📋 Auditoria de Notas", "⏱️ Métricas de Tempo"])
 
         # --- ABA 1: AUDITORIA ---
         with aba1:
-            st.write("🔍 **Filtros de Auditoria (Selecione abaixo):**")
+            st.write("🔍 **Filtros de Auditoria:**")
             c1, c2, c3 = st.columns(3)
             
             lista_at = sorted(final_df['Atendente'].unique().tolist())
@@ -137,7 +154,6 @@ if uploaded_file is not None:
             with c2: f_nota = st.multiselect("Nota(s):", lista_nota, default=lista_nota)
             with c3: f_tab = st.multiselect("Tabulação(ões):", lista_tab, default=lista_tab)
             
-            # Aplicação dos Filtros
             df_filtrado = final_df[
                 (final_df['Atendente'].isin(f_at)) & 
                 (final_df['Nota'].isin(f_nota)) & 
@@ -146,7 +162,6 @@ if uploaded_file is not None:
             
             st.subheader(f"📋 Encontramos {len(df_filtrado)} atendimentos críticos para análise")
             
-            # Exibição por Colaborador
             atendentes_filtrados = sorted(df_filtrado['Atendente'].unique().tolist())
             if not atendentes_filtrados:
                 st.info("Nenhum atendimento encontrado com os filtros selecionados.")
@@ -157,7 +172,6 @@ if uploaded_file is not None:
                         tabela_colab = df_colab[['ID do Atendimento', 'Nota', 'Comentário', 'Tabulação']]
                         st.dataframe(tabela_colab, use_container_width=True, hide_index=True)
             
-            # Visualizações Gráficas
             st.markdown("---")
             g1, g2 = st.columns(2)
             
@@ -181,7 +195,6 @@ if uploaded_file is not None:
                     for _, row in ids_por_ag.iterrows():
                         st.markdown(f"**{row['Atendente']}:** {row['ID do Atendimento']}")
 
-            # Leitura de Comentários
             st.markdown("---")
             st.subheader("💬 Leitura Direta de IDs e Comentários Críticos")
             df_comentarios = df_filtrado[df_filtrado['Raw_Text'].apply(eh_comentario_critico)].copy()
@@ -192,32 +205,33 @@ if uploaded_file is not None:
         with aba2:
             st.subheader("⏱️ Métricas de Tempo e Eficiência (Geral da Base)")
             
-            # Cálculo dos tempos em segundos
-            if 'attended_at' in df_mapeado.columns and 'created_at' in df_mapeado.columns:
-                df_mapeado['Seg_Espera'] = (df_mapeado['attended_at'] - df_mapeado['created_at']).dt.total_seconds()
-            else:
-                df_mapeado['Seg_Espera'] = 0
+            # Cálculos de diferenças de tempo de forma segura
+            df_mapeado['Seg_Espera'] = (df_mapeado['attended_at'] - df_mapeado['created_at']).dt.total_seconds().fillna(0)
+            df_mapeado['Seg_TMA'] = (df_mapeado['closed_at'] - df_mapeado['attended_at']).dt.total_seconds().fillna(0)
 
-            if 'closed_at' in df_mapeado.columns and 'attended_at' in df_mapeado.columns:
-                df_mapeado['Seg_TMA'] = (df_mapeado['closed_at'] - df_mapeado['attended_at']).dt.total_seconds()
-            else:
-                df_mapeado['Seg_TMA'] = 0
+            # Métricas gerais
+            media_espera_geral = df_mapeado['Seg_Espera'].mean()
+            st.metric("Tempo Médio de Espera (Fila - Geral)", formatar_tempo(media_espera_geral))
             
-            # Exibe tempo médio geral de espera na fila
-            st.metric("Tempo Médio de Espera (Fila - Geral)", formatar_tempo(df_mapeado['Seg_Espera'].mean()))
-            
-            # 1. Cria DataFrame base com TODOS os atendentes cadastrados no dicionário
+            # 1. Obter todos os atendentes únicos cadastrados
             todos_atendentes = sorted(list(set(MAPEAMENTO_NOMES.values())))
             df_todos = pd.DataFrame({'Atendente': todos_atendentes})
             
-            # 2. Calcula as médias por atendente a partir dos atendimentos presentes no CSV
-            tma_calculado = df_mapeado.groupby('Atendente')['Seg_TMA'].mean().reset_index()
+            # 2. Calcular TMA médio apenas para os que possuem registros válidos
+            tma_calculado = df_mapeado[df_mapeado['Seg_TMA'] > 0].groupby('Atendente')['Seg_TMA'].mean().reset_index()
             
-            # 3. Faz o merge para incluir quem não teve atendimento (ficando com NaN ou 0)
+            # 3. Unificar a lista completa de atendentes com os cálculos
             tma_completo = pd.merge(df_todos, tma_calculado, on='Atendente', how='left')
+            tma_completo['Seg_TMA'] = tma_completo['Seg_TMA'].fillna(0)
             
-            # 4. Formata o tempo para exibição legível
+            # 4. Formatar a coluna para texto legível
             tma_completo['Média TMA'] = tma_completo['Seg_TMA'].apply(formatar_tempo)
             
-            # 5. Exibe a tabela final
-            st.table(tma_completo[['Atendente', 'Média TMA']].set_index('Atendente'))
+            # 5. Exibir a tabela final
+            st.dataframe(
+                tma_completo[['Atendente', 'Média TMA']],
+                use_container_width=True,
+                hide_index=True
+            )
+else:
+    st.info("👆 Por favor, envie o arquivo CSV no campo acima para carregar o painel.")
