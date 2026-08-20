@@ -110,7 +110,7 @@ if uploaded_file is not None:
         # Filtra apenas registros com atendentes mapeados
         df_mapeado = df[df['Atendente'].notna()].copy()
 
-        # 3. Lógica de Auditoria
+        # 3. Lógica de Auditoria (Apenas para a Aba 1)
         nota_ruim = (df_mapeado['feedback_score'] >= 0) & (df_mapeado['feedback_score'] <= 3)
         tem_comentario_critico_real = df_mapeado['feedback_text_clean'].apply(eh_comentario_critico)
         
@@ -190,8 +190,9 @@ if uploaded_file is not None:
 
         # --- ABA 2: MÉTRICAS DE TEMPO ---
         with aba2:
-            st.subheader("⏱️ Métricas de Tempo e Eficiência")
+            st.subheader("⏱️ Métricas de Tempo e Eficiência (Geral da Base)")
             
+            # Cálculo dos tempos em segundos
             if 'attended_at' in df_mapeado.columns and 'created_at' in df_mapeado.columns:
                 df_mapeado['Seg_Espera'] = (df_mapeado['attended_at'] - df_mapeado['created_at']).dt.total_seconds()
             else:
@@ -202,8 +203,21 @@ if uploaded_file is not None:
             else:
                 df_mapeado['Seg_TMA'] = 0
             
+            # Exibe tempo médio geral de espera na fila
             st.metric("Tempo Médio de Espera (Fila - Geral)", formatar_tempo(df_mapeado['Seg_Espera'].mean()))
             
-            tma_atend = df_mapeado.groupby('Atendente')[['Seg_TMA']].mean().reset_index()
-            tma_atend['Média TMA'] = tma_atend['Seg_TMA'].apply(formatar_tempo)
-            st.table(tma_atend[['Atendente', 'Média TMA']].set_index('Atendente'))
+            # 1. Cria DataFrame base com TODOS os atendentes cadastrados no dicionário
+            todos_atendentes = sorted(list(set(MAPEAMENTO_NOMES.values())))
+            df_todos = pd.DataFrame({'Atendente': todos_atendentes})
+            
+            # 2. Calcula as médias por atendente a partir dos atendimentos presentes no CSV
+            tma_calculado = df_mapeado.groupby('Atendente')['Seg_TMA'].mean().reset_index()
+            
+            # 3. Faz o merge para incluir quem não teve atendimento (ficando com NaN ou 0)
+            tma_completo = pd.merge(df_todos, tma_calculado, on='Atendente', how='left')
+            
+            # 4. Formata o tempo para exibição legível
+            tma_completo['Média TMA'] = tma_completo['Seg_TMA'].apply(formatar_tempo)
+            
+            # 5. Exibe a tabela final
+            st.table(tma_completo[['Atendente', 'Média TMA']].set_index('Atendente'))
